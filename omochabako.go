@@ -1,43 +1,14 @@
 package main
 
 import (
-        "fmt"
+        "log"
         "os"
         "os/exec"
         "syscall"
-
-        "github.com/docker/docker/pkg/reexec"
 )
 
-func init() {
-        reexec.Register("omInitialisation", omInitialisation)
-        if reexec.Init() {
-                os.Exit(0)
-        }
-}
-
-func omInitialisation() {
-        fmt.Printf("\n>> namespace setup code goes here <<\n\n")
-        omRun()
-}
-
-func omRun() {
-        cmd := exec.Command("/bin/sh")
-
-        cmd.Stdin = os.Stdin
-        cmd.Stdout = os.Stdout
-        cmd.Stderr = os.Stderr
-
-        cmd.Env = []string{"PS1=[omochabako]%"}
-
-        if err := cmd.Run(); err != nil {
-                fmt.Printf("Error running the /bin/sh command - %s\n", err)
-                os.Exit(1)
-        }
-}
-
-func main() {
-        cmd := reexec.Command("omInitialisation")
+func Run() {
+        cmd := exec.Command("/proc/self/exe", "init")
 
         cmd.Stdin = os.Stdin
         cmd.Stdout = os.Stdout
@@ -47,8 +18,8 @@ func main() {
 
         cmd.SysProcAttr = &syscall.SysProcAttr{
                 Cloneflags: syscall.CLONE_NEWNS |
-                        syscall.CLONE_NEWIPC
                         syscall.CLONE_NEWUTS |
+                        syscall.CLONE_NEWIPC |
                         syscall.CLONE_NEWPID |
                         syscall.CLONE_NEWNET |
                         syscall.CLONE_NEWUSER,
@@ -68,7 +39,35 @@ func main() {
                 },
         }
         if err := cmd.Run(); err != nil {
-                fmt.Printf("Error running the reexec.Command - %s\n", err)
-                os.Exit(1)
+                log.Fatalf("Error running the cmd.Run - %s\n", err)
+        }
+        os.Exit(0)
+}
+
+func Initialisation() error {
+        if err := syscall.Sethostname([]byte("omochabako")); err != nil {
+                log.Fatalf("Error setting hostname - %s\n", err)
+        }
+        if err := syscall.Exec("/bin/sh", []string{"/bin/sh"}, os.Environ()); err != nil {
+                log.Fatalf("Error exec: $s\n", err)
+        }
+        return nil
+}
+
+func Usage() {
+        log.Fatalf("Usage: %s run\n", os.Args[0])
+}
+
+func main() {
+        switch os.Args[1] {
+        case "run":
+                Run()
+        case "init":
+                if err := Initialisation(); err != nil {
+                        log.Fatalf("Error: %s init\n", err)
+                }
+                os.Exit(0)
+        default:
+                Usage()
         }
 }
